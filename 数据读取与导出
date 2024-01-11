@@ -1,0 +1,258 @@
+import threading
+import pandas as pd
+import xlwings as xw
+from pyexcelerate import Workbook
+from multiprocessing import Semaphore, Process, Manager, cpu_count
+import os
+import mysql.connector
+from threading import Thread
+
+
+class DataProcessor:
+    """类说明:\n
+    一、该类包含以下功能：\n
+    1.1、datafetch_process：合并文件（多进程），可以把同一个文件夹下面的表合并到一个df中；\n
+    1.2、datafetch_thread：合并文件（多线程），可以把同一个文件夹下面的表合并到一个df中；\n
+    2.1、dataexport_process：拆分文件（多进程），可以把一个df文件拆分到指定的路径下面；\n
+    2.2、dataexport_thread：拆分文件（多线程），可以把一个df文件拆分到指定的路径下面；\n
+    3.1、sql_process：数据库取数（多进程），可以通过指定字段以及分类标签，加速读取sql数据集中的数据。\n
+    3.2、sql_thread：数据库取数（多线程），可以通过指定字段以及分类标签，加速读取sql数据集中的数据。\n
+    ----\n
+    二、其中涉及到的参数及说明如下：\n
+    1、file_path：初始化文件读取或保存路径（文件合并、文件拆分）；\n
+    2、sheet_name：初始化sheet名称（文件合并、文件拆分）；\n
+    3、split_fields：初始化拆分数据的字段名称（文件拆分、数据库取数）；\n
+    4、df：初始化dataframe文件（文件合并、文件拆分）；\n
+    5、df_sql：初始化sql（数据库取数）；\n
+    6、split_fields_list：初始化拆分字段列表（数据库取数）。\n
+    """
+
+    def __init__(self, file_path=None, sheet_name=None, split_fields=None, df=None, df_sql=None,
+                 split_fields_list=None):
+        # 初始化文件读取或保存路径（文件合并、文件拆分）
+        self.file_path = file_path
+        # 初始化sheet名称（文件合并、文件拆分）
+        self.sheet_name = sheet_name
+        # 初始化拆分字段（文件拆分、数据库取数）
+        self.split_fields = split_fields
+        # 初始化dataframe文件（文件合并、文件拆分）
+        self.df = df
+        # 初始化sql（数据库取数）
+        self.df_sql = df_sql
+        # 初始化拆分字段列表（数据库取数）
+        self.split_fields_list = split_fields_list
+
+    # 文件合并
+    def datafetch(self, filename, df_list, sema):
+        with sema:
+            # 打开Excel文件
+            wb = xw.Book(filename)
+            # 选择工作表
+            sheet = wb.sheets[self.sheet_name]
+            # 读取数据
+            data = sheet.range('A1').options(pd.DataFrame, expand='table').value
+            # 将数据添加到df_list
+            df_list.append(data)
+            # 关闭工作簿，不保存修改
+            wb.close()
+
+    # 文件拆分
+    def dataexport(self, i, df, split_fields, sema):
+        with sema:
+            # 把获取的df文件做一次dataframe转换
+            df = pd.DataFrame(df)
+            df = df[df[split_fields].values == i]
+            # 将DataFrame对象df中的列明和数据转换成一个二维列表，其中第一行是列明，后面每一行是数据的值
+            data = [df.columns.tolist()] + df.values.tolist()
+            # 创建workbook对象
+            wb = Workbook()
+            # 创建名为‘sheet1’的工作表，并将数据‘data’写入其中
+            wb.new_sheet(sheet_name='Sheet1', data=data)
+            # 将workbook对象保存到指定路径下的指定文件
+            wb.save(self.file_path + str(i) + '.xlsx')
+            print('文件' + f'{i}' + '拆分完毕')
+
+    # 数据库取数
+    def database_retrieval(self, i, df_list, sema):
+        with sema:
+            # 连接数据库
+            mydb = mysql.connector.connect(
+                host="localhost",
+                user="sa",
+                password="xiayutian0315#",
+                database="data_source"
+            )
+            # 创建游标用于执行SQL语句
+            mycursor = mydb.cursor()
+            # 执行SQL语句
+            if 'where' in self.df_sql:
+                mycursor.execute(
+                    self.df_sql + ' and ' + self.split_fields + '=' + "'" + self.split_fields_list[i] + "'")
+            else:
+                mycursor.execute(
+                    self.df_sql + 'where ' + self.split_fields + '=' + "'" + self.split_fields_list[i] + "'")
+            # 获取SQL查询字段名称
+            column_names = [i_col[0] for i_col in mycursor.description]
+            # 获取查询结果
+            result = mycursor.fetchall()
+
+            # 将查询结果转为DataFrame,指定列名为SQL字段名
+            df = pd.DataFrame(result, columns=column_names)
+            # 将数据添加到df_list
+            df_list.append(df)
+
+    # 对合并文件使用多进程
+    def datafetch_process(self):
+        """函数说明：\n
+        该函数主要用于合并文件（多进程），可以把同一个文件夹下面的表合并到一个df中；\n
+        其中涉及参数有2个：file_path和sheet_name；\n
+        file_pathd为需合并文件所在路径，格式：file_path = 'I:/数据源/'； \n
+        sheet_name为需合并的文件sheet名称，格式：'Sheet1' or '合并数据' 。
+        """
+        with Manager() as manager:
+            # 创建一个可以在多个进程之间共享和修改的列表
+            df_list = manager.list()
+            # 创建个进程列表
+            processes = []
+            # 控制进程数
+            sema = Semaphore(int(cpu_count() / 2))
+            # 遍历所有指定文件夹下的文件
+            listdir = os.listdir(self.file_path)
+            for filename in listdir:
+                # 检测文件是否为.xlsx文件
+                if filename.endswith('.xlsx') and '~' not in filename and 'csv' not in filename:
+                    p = Process(target=self.datafetch, args=(os.path.join(self.file_path, filename), df_list, sema))
+                    p.start()
+                    processes.append(p)
+            for p in processes:
+                p.join()
+            # 将所有数据拼接到一个dataframe
+            df = pd.concat(df_list)
+            df = df.reset_index()
+        return df
+
+    # 对合并文件使用多线程
+    def datafetch_thread(self):
+        """函数说明：\n
+        该函数主要用于合并文件（多线程），可以把同一个文件夹下面的表合并到一个df中；\n
+        其中涉及参数有2个：file_path和sheet_name；\n
+        file_pathd为需合并文件所在路径，格式：file_path = 'I:/数据源/'； \n
+        sheet_name为需合并的文件sheet名称，格式：'Sheet1' or '合并数据' 。
+        """
+        # 创建一个列表用于存储数据
+        df_list = []
+        # 创建一个信号量来控制线程数
+        sema = Semaphore(int(cpu_count() / 2))
+        # 遍历所有指定文件夹下的文件
+        listdir = os.listdir(self.file_path)
+        for filename in listdir:
+            # 检测文件是否为.xlsx文件
+            if filename.endswith('.xlsx') and '~' not in filename and 'csv' not in filename:
+                sema.acquire()
+                t = Thread(target=self.datafetch, args=(os.path.join(self.file_path, filename), df_list, sema))
+                t.start()
+        # 等待所有线程结束
+        for t in threading.enumerate():
+            if t is not threading.current_thread():
+                t.join()
+
+        # 将所有数据拼接到一个dataframe
+        df = pd.concat(df_list)
+        df = df.reset_index()
+        return df
+
+    # 对拆分文件使用多进程
+    def dataexport_process(self):
+        """函数说明：\n
+        该函数主要用于拆分文件（多进程），可以把某一个文件根据指定的列拆分成多个Excel文件；\n
+        其中涉及参数有3个：file_path、df、split_fields；\n
+        file_pathd为需合并文件所在路径，格式：file_path = 'I:/数据源/'； \n
+        df为需拆分的数据；\n
+        split_fields为用于数据拆分的字段名称，格式：split_fields = 'xx'。
+        """
+        # 创建个进程列表
+        processes = []
+        # 控制进程数
+        sema = Semaphore(int(cpu_count() / 2))
+        # 拆分字段去重
+        split_fields_deduplication = sorted(self.df[self.split_fields].values.tolist())
+        for i in split_fields_deduplication:
+            p = Process(target=self.dataexport, args=(i, self.df, self.split_fields, sema))
+            p.start()
+            processes.append(p)
+        [p.join() for p in processes]
+
+    # 对拆分文件使用多线程
+    def dataexport_thread(self):
+        """函数说明：\n
+        该函数主要用于拆分文件（多线程），可以把某一个文件根据指定的列拆分成多个Excel文件；\n
+        其中涉及参数有3个：file_path、df、split_fields；\n
+        file_pathd为需合并文件所在路径，格式：file_path = 'I:/数据源/'； \n
+        df为需拆分的数据；\n
+        split_fields为用于数据拆分的字段名称，格式：split_fields = 'xx'。
+        """
+        # 创建个进程列表
+        processes = []
+        # 控制进程数
+        sema = Semaphore(int(cpu_count() / 2))
+        # 拆分字段去重
+        split_fields_deduplication = sorted(self.df[self.split_fields].values.tolist())
+        for i in split_fields_deduplication:
+            p = Thread(target=self.dataexport, args=(i, self.df, self.split_fields, sema))
+            p.start()
+            processes.append(p)
+        [p.join() for p in processes]
+
+    # 对数据库取数使用多进程
+    def sql_process(self):
+        """函数说明:\n
+        该函数主要用于从数据库获取数据（多进程），可以把某一个数据库文件根据指定列的内容储存到本地内存df；\n
+        其中涉及参数有3个：df_sql、split_fields、split_fields_list；\n
+        df_sql为数据库查询语句，格式：df_sql = "SELECT * FROM `订单`"； \n
+        split_fields为用于数据拆分的字段名称，格式：split_fields = '`省/自治区`'； \n
+        split_fields_list为用于数据拆分的字段内容，格式：split_fields_list = ['北京', '上海', '安徽']。 \n
+        """
+        with Manager() as manager:
+            # 创建一个可以在多个进程之间共享和修改的列表
+            df_list = manager.list()
+            # 创建个进程列表
+            processes = []
+            # 控制进程数
+            sema = Semaphore(int(cpu_count() / 2))
+            for i in range(len(self.split_fields_list)):
+                p = Process(target=self.database_retrieval, args=(i, df_list, sema))
+                p.start()
+                processes.append(p)
+
+            for p in processes:
+                p.join()
+            # 将所有数据拼接到一个dataframe
+            df = pd.concat(df_list)
+            return df
+
+    # 对数据库取数使用多线程
+    def sql_thread(self):
+        """函数说明:\n
+        该函数主要用于从数据库获取数据（多线程），可以把某一个数据库文件根据指定列的内容储存到本地内存df；\n
+        其中涉及参数有3个：df_sql、split_fields、split_fields_list；\n
+        df_sql为数据库查询语句，格式：df_sql = "SELECT * FROM `订单`"； \n
+        split_fields为用于数据拆分的字段名称，格式：split_fields = '`省/自治区`'； \n
+        split_fields_list为用于数据拆分的字段内容，格式：split_fields_list = ['北京', '上海', '安徽']。 \n
+        """
+        with Manager() as manager:
+            # 创建一个可以在多个进程之间共享和修改的列表
+            df_list = manager.list()
+            # 创建个进程列表
+            processes = []
+            # 控制进程数
+            sema = Semaphore(int(cpu_count() / 2))
+            for i in range(len(self.split_fields_list)):
+                p = Thread(target=self.database_retrieval, args=(i, df_list, sema))
+                p.start()
+                processes.append(p)
+
+            for p in processes:
+                p.join()
+            # 将所有数据拼接到一个dataframe
+            df = pd.concat(df_list)
+            return df
