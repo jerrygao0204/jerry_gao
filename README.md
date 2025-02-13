@@ -30,7 +30,7 @@
 你可以通过克隆此仓库到你的本地机器来开始：
 
 ```shell
-git clone https://github.com/jerrygao0204/jerry.gao.git
+git clone https://github.com/jerrygao0204/jerry_gao.git
 ```
 
 然后导航至目录，并按照单个模块的指示开始操作。
@@ -199,7 +199,7 @@ Jupyter Lab 输出的日志将会保存在 `nohup.out` 文件（已在 .gitignor
 ## 联系
 
 Jerry gao - jerry.gao0204@@gmail.com
-项目链接：https://github.com/jerrygao0204/jerry.gao/
+项目链接：https://github.com/jerrygao0204/jerry_gao/
 
 项目链接: 
 
