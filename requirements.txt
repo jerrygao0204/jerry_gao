@@ -1,0 +1,8 @@
+langchain-core
+langchain-openai
+langgraph
+typing-extensions
+pyyaml
+tiktoken
+ipython
+openai

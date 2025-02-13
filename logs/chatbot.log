@@ -1,0 +1,3 @@
+2025-02-13 12:08:30,900 - vector_store - INFO - 成功加载现有向量存储
+2025-02-13 12:08:35,780 - app - INFO - 当前消息总token数: 4
+2025-02-13 12:08:39,264 - httpx - INFO - HTTP Request: POST https://api.gpt.ge/v1/chat/completions "HTTP/1.1 200 OK"

@@ -1,0 +1,85 @@
+# config.yaml
+
+# 模型配置
+model:
+    name: "gpt-3.5-turbo"    # 使用的模型名称
+    temperature: 0.7         # 模型温度参数
+    max_tokens: 4000         # 最大token数
+    encoding_name: "cl100k_base"  # 编码器名称
+    summary_model: "gpt-3.5-turbo"  # 用于总结的模型
+
+# 工具配置
+tools:
+    tavily:
+        max_results: 2
+        api_key: ${TAVILY_API_KEY}  
+    
+    weather:
+        # api_key: ${WEATHER_API_KEY}
+        api_key: "b4b8d8576a1b46b2aed135059250602"
+        base_url: "https://api.weatherapi.com/v1"
+        timeout: 3
+        
+    calculator:
+        max_precision: 10     # 计算精度
+        safe_mode: true      # 安全模式开关
+
+# 状态图配置
+graph:
+    entry_point: "chatbot"
+    checkpoint_enabled: true
+    memory_saver: true
+    thread_id: "main_thread"           # 添加此行
+    checkpoint_id: "main_checkpoint"   # 添加此行
+    checkpoint_namespace: "main_ns"    # 添加此行
+
+# 消息处理配置
+messages:
+    max_context_length: 4000  # 上下文最大长度
+    trim_strategy: "summary"  # 裁剪策略：summary/truncate
+    keep_latest: 3           # 保留最近消息数量
+
+# 日志配置
+logging:
+    name: "app"
+    level: "INFO"
+    directory: "logs"
+    filename_pattern: "chatbot.log"
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    file_logging: true
+    console_logging: true
+    rotate_by_size: false
+    rotate_when: "midnight"
+    rotate_interval: 1
+    backup_count: 7
+    max_bytes: 10485760  # 10MB
+
+# 向量库配置
+vector_db:
+    # 向量数据库基础配置
+    index_name: "chat_history"                # 索引名称
+    store_directory: "./vector_store"         # 存储目录
+    embedding_function: "text-embedding-3-small"  # OpenAI embedding 模型名称
+    
+    # FAISS 相关配置
+    dimension: 1536                           # 向量维度 (OpenAI embedding的维度)
+    distance_metric: "cosine"                 # 距离度量方式：cosine, l2, inner_product
+    nlist: 100                               # 聚类中心数量
+    nprobe: 10                               # 搜索时检查的聚类数量
+    
+    # 搜索配置
+    default_top_k: 3                         # 默认返回的最相似结果数量
+    
+    # 存储配置
+    auto_save: true                          # 是否自动保存
+    save_interval: 10                        # 每多少次写操作后保存一次
+    
+    # 性能配置
+    batch_size: 1000                         # 批处理大小
+    use_gpu: false                           # 是否使用GPU
+    
+    # 维护配置
+    backup_enabled: true                     # 是否启用备份
+    backup_interval: 24                      # 备份间隔（小时）
+    backup_directory: "./vector_store"  # 备份目录
+    max_backups: 7                           # 保留的最大备份数量
