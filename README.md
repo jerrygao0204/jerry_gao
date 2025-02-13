@@ -30,7 +30,7 @@
 你可以通过克隆此仓库到你的本地机器来开始：
 
 ```shell
-
+git clone https://github.com/jerrygao0204/jerry.gao.git
 ```
 
 然后导航至目录，并按照单个模块的指示开始操作。
