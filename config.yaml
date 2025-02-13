@@ -15,8 +15,7 @@ tools:
         api_key: ${TAVILY_API_KEY}  
     
     weather:
-        # api_key: ${WEATHER_API_KEY}
-        api_key: "b4b8d8576a1b46b2aed135059250602"
+        api_key: ${WEATHER_API_KEY}
         base_url: "https://api.weatherapi.com/v1"
         timeout: 3
         
