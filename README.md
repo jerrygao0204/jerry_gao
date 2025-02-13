@@ -199,6 +199,7 @@ Jupyter Lab 输出的日志将会保存在 `nohup.out` 文件（已在 .gitignor
 ## 联系
 
 Jerry gao - jerry.gao0204@@gmail.com
+项目链接：https://github.com/jerrygao0204/jerry.gao/
 
 项目链接: 
 
