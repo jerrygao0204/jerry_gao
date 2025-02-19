@@ -8,7 +8,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
 from langchain.schema import Document
 import sys
-
+import numpy as np
 # 配置日志记录器
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -215,8 +215,11 @@ class VectorStoreManager:
             Document or str: 返回相似度为100%的文档，如果没有则返回提示字符串
         """
         try:
+            # 将查询字符串转换为嵌入向量
+            query_vector = self.embeddings.embed_query(query)
+            query_vector = query_vector / np.linalg.norm(query_vector)  # 归一化 2025.02.19
             docs_and_scores = self.vector_store.similarity_search_with_score(
-                query, 
+                str(query_vector), 
                 k=self.db_config['default_top_k']
             )
             
@@ -229,12 +232,29 @@ class VectorStoreManager:
             # 打印相似度评分
             for doc, score in sorted_docs:
                 self.logger.info("文档: {}, 相似度评分: {}".format(doc.page_content, score))
+
+
+            # 检查并应用过滤条件
+            def metadata_matches(doc):
+                # 检查 `metadata_filters`
+                if self.db_config.get('metadata_filters'):
+                    for key, value in self.db_config['metadata_filters'].items():
+                        if doc.metadata.get(key) != value:
+                            return False
+                return True
+
             
-            # 过滤掉初始文档
+            # 获取当前日期
+            current_date = datetime.now().date()
+            
+            # 过滤掉初始文档，并加上元数据的过滤条件和timestamp过滤条件
             filtered_docs = [
                 (doc, score) for doc, score in sorted_docs 
-                if doc.page_content != "Vector store initialization document"
+                if doc.page_content != "Vector store initialization document" 
+                and metadata_matches(doc)
+                and (not self.db_config['timestamp_filter'] or datetime.strptime(doc.metadata.get('timestamp'), "%Y-%m-%d").date() < current_date)
             ]
+            
             
             # 只返回相似度为1.0（100%）的文档
             for doc, score in filtered_docs:
