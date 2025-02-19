@@ -59,6 +59,8 @@ vector_db:
     index_name: "chat_history"                # 索引名称
     store_directory: "./vector_store"         # 存储目录
     embedding_function: "text-embedding-3-small"  # OpenAI embedding 模型名称
+
+    
     
     # FAISS 相关配置
     dimension: 1536                           # 向量维度 (OpenAI embedding的维度)
@@ -67,7 +69,13 @@ vector_db:
     nprobe: 10                               # 搜索时检查的聚类数量
     
     # 搜索配置
-    default_top_k: 3                         # 默认返回的最相似结果数量
+    default_top_k: 10                        # 默认返回的最相似结果数量
+    similarity_threshold: 1                 # 默认相似度阈值
+    metadata_filters:
+        source: "example1"
+        another_metadata_key: "example1"
+    timestamp_filter: true                    # 是否启用timestamp过滤
+    
     
     # 存储配置
     auto_save: true                          # 是否自动保存
